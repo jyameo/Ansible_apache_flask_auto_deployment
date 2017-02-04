@@ -1,0 +1,48 @@
+---
+
+- hosts: localhost
+  connection: local
+  user: ec2-user
+  become: true
+
+  vars:
+    app_src: /usr/local/src
+    app_dest: /var/www/FlaskApp
+
+  tasks:
+    - name: Install necessary packages
+      yum: name={{ item }} state=present
+      with_items:
+        - epel-release
+        - httpd
+        - mod_wsgi
+        - python-devel
+        - python-pip
+        
+    - name: Create necessary app directories
+      file:
+        path: "{{ app_dest }}/logs"
+        state: directory
+
+    - name: Copy application files to site location
+      command: cp -af "{{ app_src }}/." {{ app_dest }}
+
+    - name: Copy httpd conf file
+      command: cp -rf "{{ app_dest }}/flask_app.conf" /etc/httpd/conf.d/flask_app.conf
+
+    - name: Install python dependencies
+      pip:
+        requirements: "{{ app_dest }}/app/requirements.txt"
+        virtualenv: "{{ app_dest }}/app/venv"
+
+    - name: Run flask application
+      command: "{{ app_dest }}/app/venv/bin/python2.7 {{ app_dest }}/app/app.py"
+      async: 60
+      poll: 0
+      register: flask_app_LOG
+
+    - name: Reload Apache
+      command: /usr/sbin/httpd -k restart
+
+    - debug:
+        var: flask_app_LOG
